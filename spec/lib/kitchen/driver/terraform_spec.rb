@@ -19,7 +19,6 @@ require "kitchen"
 require "kitchen/driver/terraform"
 require "kitchen/terraform/client_version_verifier"
 require "kitchen/terraform/error"
-require "kitchen/terraform/shell_out"
 require "support/kitchen/terraform/config_attribute/backend_configurations_examples"
 require "support/kitchen/terraform/config_attribute/color_examples"
 require "support/kitchen/terraform/config_attribute/command_timeout_examples"
@@ -77,49 +76,40 @@ require "support/kitchen/terraform/result_in_success_matcher"
       "/kitchen/root"
     end
 
-    let :shell_out do
-      class_double(::Kitchen::Terraform::ShellOut).as_stubbed_const
-    end
-
-    def shell_out_run_failure(command:, message: "mocked `terraform` failure")
-      allow(shell_out)
+    def run_command_failure(command:, message: "mocked `terraform` failure")
+      allow(described_instance)
         .to(
-          receive(:run)
+          receive(:run_command)
             .with(
-              command: command,
-              duration: 600,
-              logger: kitchen_logger
+              command,
+              environment:
+                {
+                  "LC_ALL" => nil,
+                  "TF_IN_AUTOMATION" => true
+                },
+              timeout: 600
             )
             .and_raise(
-              ::Kitchen::Terraform::Error,
+              ::Kitchen::ShellOut::ShellCommandFailed,
               message
             )
         )
     end
 
-    def shell_out_run_success(command:, return_value: "mocked `terraform` success")
-      allow(shell_out)
+    def run_command_success(command:, return_value: "mocked `terraform` success")
+      allow(described_instance)
         .to(
-          receive(:run)
+          receive(:run_command)
             .with(
-              command: command,
-              duration: 600,
-              logger: kitchen_logger
+              command,
+              environment:
+                {
+                  "LC_ALL" => nil,
+                  "TF_IN_AUTOMATION" => true
+                },
+              timeout: 600
             )
             .and_return(return_value)
-        )
-    end
-
-    def shell_out_run_yield(command:, standard_output: "mocked `terraform` success")
-      allow(shell_out)
-        .to(
-          receive(:run)
-            .with(
-              command: command,
-              duration: 600,
-              logger: kitchen_logger
-            )
-            .and_yield(standard_output: standard_output)
         )
     end
 
@@ -129,7 +119,7 @@ require "support/kitchen/terraform/result_in_success_matcher"
       end
 
       before do
-        shell_out_run_success command: "workspace #{subcommand} kitchen-terraform-test-suite-test-platform"
+        run_command_success command: "terraform workspace #{subcommand} kitchen-terraform-test-suite-test-platform"
       end
 
       it do
@@ -190,8 +180,8 @@ require "support/kitchen/terraform/result_in_success_matcher"
       shared_examples "terraform: get; validate; apply; output" do
         context "when `terraform get` results in failure" do
           before do
-            shell_out_run_failure(
-              command: /get/,
+            run_command_failure(
+              command: /terraform get/,
               message: "mocked `terraform get` failure"
             )
           end
@@ -203,13 +193,13 @@ require "support/kitchen/terraform/result_in_success_matcher"
 
         context "when `terraform get` results in success" do
           before do
-            shell_out_run_success command: "get -update #{kitchen_root}"
+            run_command_success command: "terraform get -update #{kitchen_root}"
           end
 
           context "when `terraform validate` results in failure" do
             before do
-              shell_out_run_failure(
-                command: /validate/,
+              run_command_failure(
+                command: /terraform validate/,
                 message: "mocked `terraform validate` failure"
               )
             end
@@ -221,21 +211,21 @@ require "support/kitchen/terraform/result_in_success_matcher"
 
           context "when `terraform validate` results in success" do
             before do
-              shell_out_run_success(
+              run_command_success(
                 command:
-                  /validate\s
-                    -check-variables=true\s
-                    -no-color\s
-                    -var="key=value"\s
-                    -var-file=\/variable\/file\s
-                    #{kitchen_root}/x
+                  "terraform validate " \
+                    "-check-variables=true " \
+                    "-no-color " \
+                    "-var=\"key=value\" " \
+                    "-var-file=/variable/file " \
+                    "#{kitchen_root}"
               )
             end
 
             context "when `terraform apply` results in failure" do
               before do
-                shell_out_run_failure(
-                  command: /apply/,
+                run_command_failure(
+                  command: /terraform apply/,
                   message: "mocked `terraform apply` failure"
                 )
               end
@@ -247,26 +237,26 @@ require "support/kitchen/terraform/result_in_success_matcher"
 
             context "when `terraform apply` results in success" do
               before do
-                shell_out_run_success(
+                run_command_success(
                   command:
-                    /apply\s
-                      -lock=true\s
-                      -lock-timeout=0s\s
-                      -input=false\s
-                      -auto-approve=true\s
-                      -no-color\s
-                      -parallelism=10\s
-                      -refresh=true\s
-                      -var="key=value"\s
-                      -var-file=\/variable\/file\s
-                      #{kitchen_root}/x
+                    "terraform apply " \
+                      "-lock=true " \
+                      "-lock-timeout=0s " \
+                      "-input=false " \
+                      "-auto-approve=true " \
+                      "-no-color " \
+                      "-parallelism=10 " \
+                      "-refresh=true " \
+                      "-var=\"key=value\" " \
+                      "-var-file=/variable/file " \
+                      "#{kitchen_root}"
                 )
               end
 
               context "when `terraform output` results in failure due to no outputs defined" do
                 before do
-                  shell_out_run_failure(
-                    command: "output -json",
+                  run_command_failure(
+                    command: "terraform output -json",
                     message: "no outputs defined"
                   )
                 end
@@ -278,8 +268,8 @@ require "support/kitchen/terraform/result_in_success_matcher"
 
               context "when `terraform output` results in failure" do
                 before do
-                  shell_out_run_failure(
-                    command: "output -json",
+                  run_command_failure(
+                    command: "terraform output -json",
                     message: "mocked `terraform output` failure"
                   )
                 end
@@ -291,9 +281,9 @@ require "support/kitchen/terraform/result_in_success_matcher"
 
               context "when `terraform output` results in success" do
                 before do
-                  shell_out_run_yield(
-                    command: "output -json",
-                    standard_output: terraform_output_value
+                  run_command_success(
+                    command: "terraform output -json",
+                    return_value: terraform_output_value
                   )
                 end
 
@@ -347,16 +337,16 @@ require "support/kitchen/terraform/result_in_success_matcher"
 
       context "when `terraform workspace select <kitchen-instance>` results in failure" do
         before do
-          shell_out_run_failure(
-            command: "workspace select kitchen-terraform-test-suite-test-platform",
+          run_command_failure(
+            command: "terraform workspace select kitchen-terraform-test-suite-test-platform",
             message: "mocked `terraform workspace select <kitchen-instance>` failure"
           )
         end
 
         context "when `terraform workspace new <kitchen-instance>` results in failure" do
           before do
-            shell_out_run_failure(
-              command: "workspace new kitchen-terraform-test-suite-test-platform",
+            run_command_failure(
+              command: "terraform workspace new kitchen-terraform-test-suite-test-platform",
               message: "mocked `terraform workspace new <kitchen-instance>` failure"
             )
           end
@@ -369,7 +359,7 @@ require "support/kitchen/terraform/result_in_success_matcher"
 
         context "when `terraform workspace new <kitchen-instance>` results in success" do
           before do
-            shell_out_run_success command: "workspace new kitchen-terraform-test-suite-test-platform"
+            run_command_success command: "terraform workspace new kitchen-terraform-test-suite-test-platform"
           end
 
           it_behaves_like "terraform: get; validate; apply; output"
@@ -378,7 +368,7 @@ require "support/kitchen/terraform/result_in_success_matcher"
 
       context "when `terraform workspace select <kitchen-instance>` results in success" do
         before do
-          shell_out_run_success command: "workspace select kitchen-terraform-test-suite-test-platform"
+          run_command_success command: "terraform workspace select kitchen-terraform-test-suite-test-platform"
         end
 
         it_behaves_like "terraform: get; validate; apply; output"
@@ -398,8 +388,8 @@ require "support/kitchen/terraform/result_in_success_matcher"
 
       context "when `terraform init` results in failure" do
         before do
-          shell_out_run_failure(
-            command: /init/,
+          run_command_failure(
+            command: /terraform init/,
             message: "mocked `terraform init` failure"
           )
         end
@@ -417,37 +407,37 @@ require "support/kitchen/terraform/result_in_success_matcher"
 
       context "when `terraform init` results in success" do
         before do
-          shell_out_run_success(
+          run_command_success(
             command:
-              /init\s
-                -input=false\s
-                -lock=true\s
-                -lock-timeout=0s\s
-                -no-color\s
-                -upgrade\s
-                -force-copy\s
-                -backend=true\s
-                -backend-config="key=value"\s
-                -get=true\s
-                -get-plugins=true\s
-                -plugin-dir=\/plugin\/directory\s
-                -verify-plugins=true\s
-                #{kitchen_root}/x
+              "terraform init " \
+                "-input=false " \
+                "-lock=true " \
+                "-lock-timeout=0s " \
+                "-no-color " \
+                "-upgrade " \
+                "-force-copy " \
+                "-backend=true " \
+                "-backend-config=\"key=value\" " \
+                "-get=true " \
+                "-get-plugins=true " \
+                "-plugin-dir=/plugin/directory " \
+                "-verify-plugins=true " \
+                "#{kitchen_root}"
           )
         end
 
         context "when `terraform workspace select <kitchen-instance>` results in failure" do
           before do
-            shell_out_run_failure(
-              command: "workspace select kitchen-terraform-test-suite-test-platform",
+            run_command_failure(
+              command: "terraform workspace select kitchen-terraform-test-suite-test-platform",
               message: "mocked `terraform workspace select <kitchen-instance>` failure"
             )
           end
 
           context "when `terraform workspace new <kitchen-instance>` results in failure" do
             before do
-              shell_out_run_failure(
-                command: "workspace new kitchen-terraform-test-suite-test-platform",
+              run_command_failure(
+                command: "terraform workspace new kitchen-terraform-test-suite-test-platform",
                 message: "mocked `terraform workspace new <kitchen-instance>` failure"
               )
             end
@@ -491,8 +481,8 @@ require "support/kitchen/terraform/result_in_success_matcher"
 
       context "when `terraform init` results in failure" do
         before do
-          shell_out_run_failure(
-            command: /init/,
+          run_command_failure(
+            command: /terraform init/,
             message: "mocked `terraform init` failure"
           )
         end
@@ -510,36 +500,36 @@ require "support/kitchen/terraform/result_in_success_matcher"
 
       context "when `terraform init` results in success" do
         before do
-          shell_out_run_success(
+          run_command_success(
             command:
-              /init\s
-                -input=false\s
-                -lock=true\s
-                -lock-timeout=0s\s
-                -no-color\s
-                -force-copy\s
-                -backend=true\s
-                -backend-config="key=value"\s
-                -get=true\s
-                -get-plugins=true\s
-                -plugin-dir=\/plugin\/directory\s
-                -verify-plugins=true\s
-                #{kitchen_root}/x
+              "terraform init " \
+                "-input=false " \
+                "-lock=true " \
+                "-lock-timeout=0s " \
+                "-no-color " \
+                "-force-copy " \
+                "-backend=true " \
+                "-backend-config=\"key=value\" " \
+                "-get=true " \
+                "-get-plugins=true " \
+                "-plugin-dir=/plugin/directory " \
+                "-verify-plugins=true " \
+                "#{kitchen_root}"
           )
         end
 
         context "when `terraform workspace select <kitchen-instance>` results in failure" do
           before do
-            shell_out_run_failure(
-              command: "workspace select kitchen-terraform-test-suite-test-platform",
+            run_command_failure(
+              command: "terraform workspace select kitchen-terraform-test-suite-test-platform",
               message: "mocked `terraform workspace select <kitchen-instance>` failure"
             )
           end
 
           context "when `terraform workspace new <kitchen-instance>` results in failure" do
             before do
-              shell_out_run_failure(
-                command: "workspace new kitchen-terraform-test-suite-test-platform",
+              run_command_failure(
+                command: "terraform workspace new kitchen-terraform-test-suite-test-platform",
                 message: "mocked `terraform workspace new <kitchen-instance>` failure"
               )
             end
@@ -558,13 +548,13 @@ require "support/kitchen/terraform/result_in_success_matcher"
 
         context "when `terraform workspace select <kitchen-instance>` results in success" do
           before do
-            shell_out_run_success command: "workspace select kitchen-terraform-test-suite-test-platform"
+            run_command_success command: "terraform workspace select kitchen-terraform-test-suite-test-platform"
           end
 
           context "when `terraform destroy` results in failure" do
             before do
-              shell_out_run_failure(
-                command: /destroy/,
+              run_command_failure(
+                command: /terraform destroy/,
                 message: "mocked `terraform destroy` failure"
               )
             end
@@ -582,26 +572,26 @@ require "support/kitchen/terraform/result_in_success_matcher"
 
           context "when `terraform destroy` results in success" do
             before do
-              shell_out_run_success(
+              run_command_success(
                 command:
-                  /destroy\s
-                    -force\s
-                    -lock=true\s
-                    -lock-timeout=0s\s
-                    -input=false\s
-                    -no-color\s
-                    -parallelism=10\s
-                    -refresh=true\s
-                    -var="key=value"\s
-                    -var-file=\/variable\/file\s
-                    #{kitchen_root}/x
+                  "terraform destroy " \
+                    "-force " \
+                    "-lock=true " \
+                    "-lock-timeout=0s " \
+                    "-input=false " \
+                    "-no-color " \
+                    "-parallelism=10 " \
+                    "-refresh=true " \
+                    "-var=\"key=value\" " \
+                    "-var-file=/variable/file " \
+                    "#{kitchen_root}"
               )
             end
 
             context "when `terraform select default` results in failure" do
               before do
-                shell_out_run_failure(
-                  command: "workspace select default",
+                run_command_failure(
+                  command: "terraform workspace select default",
                   message: "mocked `terraform workspace select default` failure"
                 )
               end
@@ -619,13 +609,13 @@ require "support/kitchen/terraform/result_in_success_matcher"
 
             context "when `terraform workspace select default` results in success" do
               before do
-                shell_out_run_success command: "workspace select default"
+                run_command_success command: "terraform workspace select default"
               end
 
               context "when `terraform workspace delete <kitchen-instance>` results in failure" do
                 before do
-                  shell_out_run_failure(
-                    command: "workspace delete kitchen-terraform-test-suite-test-platform",
+                  run_command_failure(
+                    command: "terraform workspace delete kitchen-terraform-test-suite-test-platform",
                     message: "mocked `terraform workspace delete <kitchen-instance>` failure"
                   )
                 end
@@ -663,8 +653,8 @@ require "support/kitchen/terraform/result_in_success_matcher"
 
       context "when `terraform version` results in failure" do
         before do
-          shell_out_run_failure(
-            command: "version",
+          run_command_failure(
+            command: "terraform version",
             message: "mocked `terraform version` failure"
           )
         end
@@ -682,8 +672,8 @@ require "support/kitchen/terraform/result_in_success_matcher"
 
       context "when `terraform version` results in success" do
         before do
-          shell_out_run_success(
-            command: "version",
+          run_command_success(
+            command: "terraform version",
             return_value: version_return_value
           )
         end
