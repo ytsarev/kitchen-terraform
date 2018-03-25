@@ -19,6 +19,7 @@ require "kitchen/errors"
 require "kitchen/terraform/client_version_verifier"
 require "kitchen/terraform/command/output"
 require "kitchen/terraform/config_attribute/backend_configurations"
+require "kitchen/terraform/config_attribute/backend_file"
 require "kitchen/terraform/config_attribute/color"
 require "kitchen/terraform/config_attribute/command_timeout"
 require "kitchen/terraform/config_attribute/lock"
@@ -179,6 +180,8 @@ class ::Kitchen::Driver::Terraform < ::Kitchen::Driver::Base
   no_parallel_for
 
   include ::Kitchen::Terraform::ConfigAttribute::BackendConfigurations
+
+  include ::Kitchen::Terraform::ConfigAttribute::BackendFile
 
   include ::Kitchen::Terraform::ConfigAttribute::Color
 
@@ -342,6 +345,7 @@ class ::Kitchen::Driver::Terraform < ::Kitchen::Driver::Base
             "-force-copy " \
             "-backend=true " \
             "#{config_backend_configurations_flags} " \
+            "#{config_backend_file_flag} " \
             "-get=true " \
             "-get-plugins=true " \
             "#{config_plugin_directory_flag} " \
@@ -386,6 +390,7 @@ class ::Kitchen::Driver::Terraform < ::Kitchen::Driver::Base
             "-force-copy " \
             "-backend=true " \
             "#{config_backend_configurations_flags} " \
+            "#{config_backend_file_flag} " \
             "-get=true " \
             "-get-plugins=true " \
             "#{config_plugin_directory_flag} " \

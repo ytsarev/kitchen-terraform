@@ -39,6 +39,7 @@ require "support/kitchen/terraform/result_in_success_matcher"
     let :config do
       {
         backend_configurations: {key: "value"},
+        backend_file: "backend.conf",
         color: false,
         kitchen_root: kitchen_root,
         plugin_directory: "/plugin/directory",
@@ -422,6 +423,7 @@ require "support/kitchen/terraform/result_in_success_matcher"
                 -force-copy\s
                 -backend=true\s
                 -backend-config="key=value"\s
+                -backend-config="backend.conf"\s
                 -get=true\s
                 -get-plugins=true\s
                 -plugin-dir=\/plugin\/directory\s
@@ -514,6 +516,7 @@ require "support/kitchen/terraform/result_in_success_matcher"
                 -force-copy\s
                 -backend=true\s
                 -backend-config="key=value"\s
+                -backend-config="backend.conf"\s
                 -get=true\s
                 -get-plugins=true\s
                 -plugin-dir=\/plugin\/directory\s

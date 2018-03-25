@@ -20,3 +20,5 @@ examples/*/Gemfile.lock
 examples/*/test/assets
 tmp/
 vendor/
+bundle
+.bundle
